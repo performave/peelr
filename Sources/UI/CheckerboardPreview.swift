@@ -25,7 +25,16 @@ struct CheckerboardPreview: View {
     }
 }
 
-private struct Checkerboard: Shape {
+/// Reusable transparency-checkerboard background.
+struct CheckerboardBackground: View {
+    var body: some View {
+        Checkerboard()
+            .fill(Color(white: 0.85))
+            .background(Color.white)
+    }
+}
+
+struct Checkerboard: Shape {
     var square: CGFloat = 10
 
     func path(in rect: CGRect) -> Path {

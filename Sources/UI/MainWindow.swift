@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 @available(macOS 14.0, *)
 struct MainWindow: View {
     @EnvironmentObject var state: AppState
+    @State private var compareMode: CompareMode = .sideBySide
 
     var body: some View {
         HSplitView {
@@ -26,17 +27,9 @@ struct MainWindow: View {
 
     private var previews: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                VStack(spacing: 4) {
-                    Text("Original").font(.caption).foregroundStyle(.secondary)
-                    CheckerboardPreview(image: state.sourceImage, placeholder: "Drop image here")
-                }
-                VStack(spacing: 4) {
-                    Text("Result").font(.caption).foregroundStyle(.secondary)
-                    CheckerboardPreview(image: state.resultImage,
-                                        placeholder: state.isProcessing ? "Processing…" : "—")
-                }
-            }
+            ComparisonView(original: state.sourceImage,
+                           result: state.resultImage,
+                           mode: $compareMode)
             Text(state.statusMessage)
                 .font(.caption)
                 .foregroundStyle(.secondary)
