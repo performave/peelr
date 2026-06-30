@@ -10,7 +10,11 @@ struct RemoveBackgroundIntent: AppIntent {
         "Removes the background from an image. Auto-detects slides vs. photos."
     )
 
-    @Parameter(title: "Image", supportedTypeIdentifiers: ["public.image"])
+    // `connectToPreviousResult` makes Shortcuts auto-feed the previous action's output
+    // (e.g. Get Clipboard) into this parameter instead of leaving a static placeholder.
+    @Parameter(title: "Image",
+               supportedTypeIdentifiers: ["public.image"],
+               inputConnectionBehavior: .connectToPreviousIntentResult)
     var image: IntentFile
 
     @Parameter(title: "Mode", default: .auto)
