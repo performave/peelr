@@ -12,18 +12,18 @@ enum CompareMode: String, CaseIterable, Identifiable {
     }
 }
 
-/// Before/after viewer with shared zoom + pan. In side-by-side mode both panes share one
-/// transform, so panning/zooming either mirrors the other. In reveal mode the result is
-/// layered over the original and unveiled by a curtain that follows the mouse.
+/// Before/after viewer with shared zoom + pan.
+///
+/// Side-by-side shares one transform across both panes (pan/zoom mirrors). Reveal layers the
+/// result over the original behind a curtain that follows the mouse — each side is clipped to
+/// its *own* background so the result's transparency shows the checkerboard, not the original.
 struct ComparisonView: View {
     let original: NSImage?
     let result: NSImage?
     @Binding var mode: CompareMode
 
     @State private var zoom: CGFloat = 1
-    @State private var lastZoom: CGFloat = 1
     @State private var offset: CGSize = .zero
-    @State private var lastOffset: CGSize = .zero
     @State private var revealFraction: CGFloat = 0.5
 
     private let minZoom: CGFloat = 1
@@ -63,14 +63,8 @@ struct ComparisonView: View {
     private func pane(title: String, image: NSImage?, placeholder: String) -> some View {
         VStack(spacing: 4) {
             Text(title).font(.caption).foregroundStyle(.secondary)
-            ZStack {
-                CheckerboardBackground()
-                TransformedImage(image: image, zoom: zoom, offset: offset, placeholder: placeholder)
-            }
-            .clipped()
-            .contentShape(Rectangle())
-            .gesture(panGesture)
-            .simultaneousGesture(zoomGesture)
+            layer(image: image, placeholder: placeholder)
+                .overlay(gestureCapture(hoverEnabled: false))
         }
     }
 
@@ -79,14 +73,16 @@ struct ComparisonView: View {
     private var revealPane: some View {
         GeometryReader { geo in
             ZStack {
-                CheckerboardBackground()
-                TransformedImage(image: original, zoom: zoom, offset: offset, placeholder: "Drop image here")
-                // Result clipped to the curtain width (left of the divider).
-                TransformedImage(image: result, zoom: zoom, offset: offset, placeholder: "—")
+                // Before (original) on the right side of the curtain.
+                layer(image: original, placeholder: "Drop image here")
+                    .mask(alignment: .trailing) {
+                        Rectangle().frame(width: geo.size.width * (1 - revealFraction))
+                    }
+                // After (result, over its own checkerboard) on the left.
+                layer(image: result, placeholder: "—")
                     .mask(alignment: .leading) {
                         Rectangle().frame(width: geo.size.width * revealFraction)
                     }
-                // Divider handle.
                 Rectangle()
                     .fill(.white)
                     .frame(width: 1.5)
@@ -103,55 +99,42 @@ struct ComparisonView: View {
                 }
                 .allowsHitTesting(false)
             }
-            .contentShape(Rectangle())
-            .onContinuousHover { phase in
-                if case .active(let location) = phase {
-                    revealFraction = min(1, max(0, location.x / geo.size.width))
-                }
-            }
-            .gesture(panGesture)
-            .simultaneousGesture(zoomGesture)
+            .overlay(gestureCapture(hoverEnabled: true))
         }
     }
 
-    // MARK: - Controls
+    // MARK: - Building blocks
+
+    private func layer(image: NSImage?, placeholder: String) -> some View {
+        ZStack {
+            CheckerboardBackground()
+            TransformedImage(image: image, zoom: zoom, offset: offset, placeholder: placeholder)
+        }
+        .clipped()
+    }
+
+    private func gestureCapture(hoverEnabled: Bool) -> some View {
+        TransformGestureView(
+            hoverEnabled: hoverEnabled,
+            onPan: { dx, dy in
+                offset = CGSize(width: offset.width + dx, height: offset.height + dy)
+            },
+            onZoom: { factor in
+                zoom = min(maxZoom, max(minZoom, zoom * factor))
+            },
+            onHover: { revealFraction = $0 }
+        )
+    }
 
     private var zoomControls: some View {
         HStack(spacing: 10) {
             Image(systemName: "minus.magnifyingglass").foregroundStyle(.secondary)
-            Slider(value: Binding(
-                get: { zoom },
-                set: { zoom = $0; lastZoom = $0 }
-            ), in: minZoom...maxZoom)
+            Slider(value: Binding(get: { zoom }, set: { zoom = $0 }), in: minZoom...maxZoom)
             Image(systemName: "plus.magnifyingglass").foregroundStyle(.secondary)
-            Button("Reset") { resetTransform() }
+            Button("Reset") { zoom = 1; offset = .zero }
                 .disabled(zoom == 1 && offset == .zero)
         }
         .font(.caption)
-    }
-
-    // MARK: - Gestures
-
-    private var zoomGesture: some Gesture {
-        MagnificationGesture()
-            .onChanged { value in
-                zoom = min(maxZoom, max(minZoom, lastZoom * value))
-            }
-            .onEnded { _ in lastZoom = zoom }
-    }
-
-    private var panGesture: some Gesture {
-        DragGesture()
-            .onChanged { value in
-                offset = CGSize(width: lastOffset.width + value.translation.width,
-                                height: lastOffset.height + value.translation.height)
-            }
-            .onEnded { _ in lastOffset = offset }
-    }
-
-    private func resetTransform() {
-        zoom = 1; lastZoom = 1
-        offset = .zero; lastOffset = .zero
     }
 }
 
