@@ -14,9 +14,9 @@ enum CompareMode: String, CaseIterable, Identifiable {
 
 /// Before/after viewer with shared zoom + pan.
 ///
-/// The mode Picker lives here; the zoom/pan/reveal state lives in `ComparisonCanvas` so that
-/// the constant transform updates during panning/hovering don't re-render (and drop clicks on)
-/// the segmented control.
+/// The mode Picker lives here; the zoom/pan/reveal state lives in `ComparisonCanvas` so that the
+/// constant transform updates during panning/hovering don't re-render (and drop clicks on) the
+/// segmented control.
 struct ComparisonView: View {
     let original: NSImage?
     let result: NSImage?
@@ -44,8 +44,6 @@ private struct ComparisonCanvas: View {
     @State private var zoom: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var revealFraction: CGFloat = 0.5
-    @State private var dragAnchor: CGSize = .zero
-    @State private var dragging = false
 
     private let minZoom: CGFloat = 1
     private let maxZoom: CGFloat = 12
@@ -76,8 +74,7 @@ private struct ComparisonCanvas: View {
         VStack(spacing: 4) {
             Text(title).font(.caption).foregroundStyle(.secondary)
             layer(image: image, placeholder: placeholder)
-                .background(scrollPinchCapture)
-                .gesture(panGesture)
+                .overlay(gestureCapture(hoverEnabled: false))
         }
     }
 
@@ -110,13 +107,7 @@ private struct ComparisonCanvas: View {
                 }
                 .allowsHitTesting(false)
             }
-            .background(scrollPinchCapture)
-            .gesture(panGesture)
-            .onContinuousHover { phase in
-                if case .active(let location) = phase, geo.size.width > 0 {
-                    revealFraction = min(1, max(0, location.x / geo.size.width))
-                }
-            }
+            .overlay(gestureCapture(hoverEnabled: true))
         }
     }
 
@@ -128,38 +119,34 @@ private struct ComparisonCanvas: View {
         .clipped()
     }
 
-    // AppKit background: handles only mouse-wheel / trackpad scroll + pinch.
-    private var scrollPinchCapture: some View {
+    private func gestureCapture(hoverEnabled: Bool) -> some View {
         TransformGestureView(
+            hoverEnabled: hoverEnabled,
             onPan: { dx, dy in
                 offset = CGSize(width: offset.width + dx, height: offset.height + dy)
             },
-            onZoom: { factor in
-                zoom = min(maxZoom, max(minZoom, zoom * factor))
-            }
+            onZoom: { factor in zoomBy(factor) },
+            onHover: { revealFraction = $0 }
         )
-    }
-
-    // SwiftUI drag-to-pan (mouse and trackpad), so it doesn't fight sibling controls.
-    private var panGesture: some Gesture {
-        DragGesture()
-            .onChanged { value in
-                if !dragging { dragAnchor = offset; dragging = true }
-                offset = CGSize(width: dragAnchor.width + value.translation.width,
-                                height: dragAnchor.height + value.translation.height)
-            }
-            .onEnded { _ in dragging = false }
     }
 
     private var zoomControls: some View {
         HStack(spacing: 10) {
-            Image(systemName: "minus.magnifyingglass").foregroundStyle(.secondary)
+            Button { zoomBy(0.8) } label: { Image(systemName: "minus.magnifyingglass") }
+                .keyboardShortcut("-", modifiers: .command)
             Slider(value: Binding(get: { zoom }, set: { zoom = $0 }), in: minZoom...maxZoom)
-            Image(systemName: "plus.magnifyingglass").foregroundStyle(.secondary)
+            Button { zoomBy(1.25) } label: { Image(systemName: "plus.magnifyingglass") }
+                .keyboardShortcut("=", modifiers: .command)
             Button("Reset") { zoom = 1; offset = .zero }
+                .keyboardShortcut("0", modifiers: .command)
                 .disabled(zoom == 1 && offset == .zero)
         }
+        .buttonStyle(.borderless)
         .font(.caption)
+    }
+
+    private func zoomBy(_ factor: CGFloat) {
+        zoom = min(maxZoom, max(minZoom, zoom * factor))
     }
 }
 
