@@ -1,0 +1,45 @@
+name: Peelr
+options:
+  bundleIdPrefix: com.performave
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "-"
+    ENABLE_HARDENED_RUNTIME: NO
+    SWIFT_EMIT_LOC_STRINGS: YES
+
+targets:
+  Peelr:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+    resources:
+      - path: Resources
+        optional: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.performave.peelr
+        PRODUCT_NAME: Peelr
+        INFOPLIST_KEY_CFBundleDisplayName: Peelr
+        INFOPLIST_KEY_LSUIElement: NO
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        GENERATE_INFOPLIST_FILE: YES
+        ENABLE_APP_INTENTS: YES
+        ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: NO
+    dependencies:
+      - sdk: Vision.framework
+      - sdk: VisionKit.framework
+      - sdk: CoreImage.framework
+      - sdk: AppIntents.framework
+      - sdk: Carbon.framework
+      - sdk: AppKit.framework
+      - sdk: CoreML.framework
