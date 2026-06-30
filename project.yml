@@ -33,6 +33,7 @@ targets:
         INFOPLIST_KEY_LSUIElement: NO
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
         GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Info.plist
         ENABLE_APP_INTENTS: YES
         ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: NO
     dependencies:
