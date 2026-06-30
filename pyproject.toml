@@ -1,0 +1,24 @@
+[project]
+name = "peelr-model-tools"
+version = "1.0.0"
+description = "BiRefNet -> Core ML conversion tooling for the Peelr macOS app"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.2",
+    "torchvision>=0.17",
+    "coremltools>=8.0",
+    "transformers>=4.40",
+    "pillow>=10.0",
+    "numpy>=1.26",
+    "einops>=0.7",
+    "timm>=0.9",
+]
+
+[project.scripts]
+convert-birefnet = "convert_birefnet:main"
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+# pin nothing exotic; CPU/MPS wheels from PyPI are fine for conversion
