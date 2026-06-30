@@ -19,7 +19,7 @@ struct PeelrShortcuts: AppShortcutsProvider {
                 "Remove clipboard background with \(.applicationName)",
                 "Clean up my clipboard with \(.applicationName)"
             ],
-            shortTitle: "Peel Clipboard",
+            shortTitle: "Remove Clipboard Background",
             systemImageName: "doc.on.clipboard"
         )
     }

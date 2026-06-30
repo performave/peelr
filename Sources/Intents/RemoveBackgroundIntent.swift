@@ -49,7 +49,7 @@ struct RemoveBackgroundIntent: AppIntent {
 /// Shortcuts action: process whatever image is on the clipboard, in place.
 @available(macOS 14.0, *)
 struct RemoveBackgroundFromClipboardIntent: AppIntent {
-    static var title: LocalizedStringResource = "Peel Clipboard"
+    static var title: LocalizedStringResource = "Remove Clipboard Background"
     static var description = IntentDescription(
         "Reads the image on the clipboard, removes its background, and copies the result back."
     )
