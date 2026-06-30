@@ -14,13 +14,32 @@ enum CompareMode: String, CaseIterable, Identifiable {
 
 /// Before/after viewer with shared zoom + pan.
 ///
-/// Side-by-side shares one transform across both panes (pan/zoom mirrors). Reveal layers the
-/// result over the original behind a curtain that follows the mouse — each side is clipped to
-/// its *own* background so the result's transparency shows the checkerboard, not the original.
+/// The mode Picker lives here; the zoom/pan/reveal state lives in `ComparisonCanvas` so that
+/// the constant transform updates during panning/hovering don't re-render (and drop clicks on)
+/// the segmented control.
 struct ComparisonView: View {
     let original: NSImage?
     let result: NSImage?
     @Binding var mode: CompareMode
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Picker("Compare", selection: $mode) {
+                ForEach(CompareMode.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            ComparisonCanvas(original: original, result: result, mode: mode)
+        }
+    }
+}
+
+/// Owns the transform state and renders the panes. Isolated so its frequent updates stay local.
+private struct ComparisonCanvas: View {
+    let original: NSImage?
+    let result: NSImage?
+    let mode: CompareMode
 
     @State private var zoom: CGFloat = 1
     @State private var offset: CGSize = .zero
@@ -31,16 +50,9 @@ struct ComparisonView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Picker("Compare", selection: $mode) {
-                ForEach(CompareMode.allCases) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-
             content
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
-
             zoomControls
         }
     }
@@ -58,8 +70,6 @@ struct ComparisonView: View {
         }
     }
 
-    // MARK: - Side by side
-
     private func pane(title: String, image: NSImage?, placeholder: String) -> some View {
         VStack(spacing: 4) {
             Text(title).font(.caption).foregroundStyle(.secondary)
@@ -67,8 +77,6 @@ struct ComparisonView: View {
                 .overlay(gestureCapture(hoverEnabled: false))
         }
     }
-
-    // MARK: - Reveal
 
     private var revealPane: some View {
         GeometryReader { geo in
@@ -102,8 +110,6 @@ struct ComparisonView: View {
             .overlay(gestureCapture(hoverEnabled: true))
         }
     }
-
-    // MARK: - Building blocks
 
     private func layer(image: NSImage?, placeholder: String) -> some View {
         ZStack {
