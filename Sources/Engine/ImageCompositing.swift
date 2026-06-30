@@ -27,7 +27,19 @@ enum ImageCompositing {
     }
 
     static func cgImage(from nsImage: NSImage) -> CGImage? {
-        var rect = CGRect(origin: .zero, size: nsImage.size)
+        // Prefer the highest-resolution bitmap representation. `nsImage.size` is in points,
+        // so a Retina screenshot (e.g. a lecture slide) would otherwise be processed at half
+        // its pixel resolution. Pick the rep with the most actual pixels instead.
+        let bestRep = nsImage.representations
+            .compactMap { $0 as? NSBitmapImageRep }
+            .max { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh }
+        if let cg = bestRep?.cgImage {
+            return cg
+        }
+        // Fallback: rasterize at full pixel dimensions if we can determine them.
+        let pixelW = nsImage.representations.map(\.pixelsWide).max() ?? Int(nsImage.size.width)
+        let pixelH = nsImage.representations.map(\.pixelsHigh).max() ?? Int(nsImage.size.height)
+        var rect = CGRect(x: 0, y: 0, width: pixelW, height: pixelH)
         return nsImage.cgImage(forProposedRect: &rect, context: nil, hints: nil)
     }
 
