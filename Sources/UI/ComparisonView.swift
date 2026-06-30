@@ -73,15 +73,15 @@ struct ComparisonView: View {
     private var revealPane: some View {
         GeometryReader { geo in
             ZStack {
-                // Before (original) on the right side of the curtain.
+                // Before (original) on the left side of the curtain.
                 layer(image: original, placeholder: "Drop image here")
-                    .mask(alignment: .trailing) {
-                        Rectangle().frame(width: geo.size.width * (1 - revealFraction))
-                    }
-                // After (result, over its own checkerboard) on the left.
-                layer(image: result, placeholder: "—")
                     .mask(alignment: .leading) {
                         Rectangle().frame(width: geo.size.width * revealFraction)
+                    }
+                // After (result, over its own checkerboard) on the right.
+                layer(image: result, placeholder: "—")
+                    .mask(alignment: .trailing) {
+                        Rectangle().frame(width: geo.size.width * (1 - revealFraction))
                     }
                 Rectangle()
                     .fill(.white)
@@ -91,7 +91,7 @@ struct ComparisonView: View {
                     .allowsHitTesting(false)
                 VStack {
                     Spacer()
-                    Text("After  |  Before")
+                    Text("Before  |  After")
                         .font(.caption2)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(.ultraThinMaterial, in: Capsule())

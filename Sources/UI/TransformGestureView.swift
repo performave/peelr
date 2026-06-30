@@ -45,7 +45,7 @@ final class GestureNSView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        onPan?(event.deltaX, -event.deltaY)                      // grab-to-pan
+        onPan?(event.deltaX, event.deltaY)                       // grab-to-pan
     }
 
     override func mouseMoved(with event: NSEvent) {
