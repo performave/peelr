@@ -15,6 +15,14 @@ struct MainWindow: View {
         }
         .frame(minWidth: 720, minHeight: 460)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("Compare", selection: $compareMode) {
+                    ForEach(CompareMode.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 240)
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     state.processClipboard()

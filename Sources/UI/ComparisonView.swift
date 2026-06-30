@@ -23,15 +23,9 @@ struct ComparisonView: View {
     @Binding var mode: CompareMode
 
     var body: some View {
-        VStack(spacing: 8) {
-            Picker("Compare", selection: $mode) {
-                ForEach(CompareMode.allCases) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-
-            ComparisonCanvas(original: original, result: result, mode: mode)
-        }
+        // The mode Picker lives in the window toolbar (see MainWindow) so the preview's
+        // high-frequency hover/pan updates can never starve its clicks.
+        ComparisonCanvas(original: original, result: result, mode: mode)
     }
 }
 
@@ -94,7 +88,6 @@ private struct ComparisonCanvas: View {
                 Rectangle()
                     .fill(.white)
                     .frame(width: 1.5)
-                    .shadow(radius: 1)
                     .position(x: geo.size.width * revealFraction, y: geo.size.height / 2)
                     .allowsHitTesting(false)
                 VStack {
