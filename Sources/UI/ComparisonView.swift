@@ -44,6 +44,8 @@ private struct ComparisonCanvas: View {
     @State private var zoom: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var revealFraction: CGFloat = 0.5
+    @State private var dragAnchor: CGSize = .zero
+    @State private var dragging = false
 
     private let minZoom: CGFloat = 1
     private let maxZoom: CGFloat = 12
@@ -74,7 +76,8 @@ private struct ComparisonCanvas: View {
         VStack(spacing: 4) {
             Text(title).font(.caption).foregroundStyle(.secondary)
             layer(image: image, placeholder: placeholder)
-                .overlay(gestureCapture(hoverEnabled: false))
+                .background(scrollPinchCapture)
+                .gesture(panGesture)
         }
     }
 
@@ -107,7 +110,13 @@ private struct ComparisonCanvas: View {
                 }
                 .allowsHitTesting(false)
             }
-            .overlay(gestureCapture(hoverEnabled: true))
+            .background(scrollPinchCapture)
+            .gesture(panGesture)
+            .onContinuousHover { phase in
+                if case .active(let location) = phase, geo.size.width > 0 {
+                    revealFraction = min(1, max(0, location.x / geo.size.width))
+                }
+            }
         }
     }
 
@@ -119,17 +128,27 @@ private struct ComparisonCanvas: View {
         .clipped()
     }
 
-    private func gestureCapture(hoverEnabled: Bool) -> some View {
+    // AppKit background: handles only mouse-wheel / trackpad scroll + pinch.
+    private var scrollPinchCapture: some View {
         TransformGestureView(
-            hoverEnabled: hoverEnabled,
             onPan: { dx, dy in
                 offset = CGSize(width: offset.width + dx, height: offset.height + dy)
             },
             onZoom: { factor in
                 zoom = min(maxZoom, max(minZoom, zoom * factor))
-            },
-            onHover: { revealFraction = $0 }
+            }
         )
+    }
+
+    // SwiftUI drag-to-pan (mouse and trackpad), so it doesn't fight sibling controls.
+    private var panGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                if !dragging { dragAnchor = offset; dragging = true }
+                offset = CGSize(width: dragAnchor.width + value.translation.width,
+                                height: dragAnchor.height + value.translation.height)
+            }
+            .onEnded { _ in dragging = false }
     }
 
     private var zoomControls: some View {
