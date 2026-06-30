@@ -3,31 +3,35 @@ import SwiftUI
 @available(macOS 14.0, *)
 @main
 struct PeelrApp: App {
-    @StateObject private var state = AppState()
-
-    init() {
-        // Register the global hotkey (⌥⌘B) once at launch.
-        HotKeyManager.shared.register {
-            AppState.sharedForHotKey?.processClipboard()
-        }
-    }
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var state = AppState.shared
+    @StateObject private var hotKeys = HotKeyStore.shared
 
     var body: some Scene {
         Window("Peelr", id: "main") {
             MainWindow()
                 .environmentObject(state)
-                .onAppear { AppState.sharedForHotKey = state }
         }
         .windowResizability(.contentSize)
 
+        Settings {
+            SettingsView()
+                .environmentObject(hotKeys)
+        }
+
         MenuBarExtra("Peelr", systemImage: "scissors") {
-            Button("Remove BG from Clipboard (⌥⌘B)") {
+            Button(hotKeys.config.enabled
+                   ? "Remove BG from Clipboard (\(hotKeys.config.display))"
+                   : "Remove BG from Clipboard") {
                 state.processClipboard()
             }
             Divider()
             Button("Open Window…") {
                 NSApp.activate(ignoringOtherApps: true)
                 openMainWindow()
+            }
+            SettingsLink {
+                Text("Settings…")
             }
             Divider()
             Button("Quit") { NSApp.terminate(nil) }
@@ -43,6 +47,6 @@ struct PeelrApp: App {
 
 @available(macOS 14.0, *)
 extension AppState {
-    /// Weak-ish bridge so the C hotkey callback can reach the live AppState.
+    /// Weak bridge so the C hotkey callback and Services provider can reach the live AppState.
     @MainActor static weak var sharedForHotKey: AppState?
 }

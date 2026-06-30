@@ -11,12 +11,20 @@ final class HotKeyManager {
     private var eventHandler: EventHandlerRef?
     private var handler: (() -> Void)?
 
-    /// Default chord: ⌥⌘B.
-    func register(keyCode: UInt32 = UInt32(kVK_ANSI_B),
-                  modifiers: UInt32 = UInt32(optionKey | cmdKey),
-                  action: @escaping () -> Void) {
+    /// (Re)apply a configuration: unregister any current hotkey, then register the new one
+    /// if it is enabled. Safe to call repeatedly as the user edits the shortcut.
+    func update(_ config: HotKeyConfig, action: @escaping () -> Void) {
+        unregister()
         self.handler = action
+        guard config.enabled else { return }
+        installEventHandlerIfNeeded()
+        let hotKeyID = EventHotKeyID(signature: OSType(0x50454C52 /* "PELR" */), id: 1)
+        RegisterEventHotKey(config.keyCode, config.carbonModifiers, hotKeyID,
+                            GetApplicationEventTarget(), 0, &hotKeyRef)
+    }
 
+    private func installEventHandlerIfNeeded() {
+        guard eventHandler == nil else { return }
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
                                       eventKind: OSType(kEventHotKeyPressed))
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
@@ -32,16 +40,10 @@ final class HotKeyManager {
             }
             return noErr
         }, 1, &eventType, selfPtr, &eventHandler)
-
-        let hotKeyID = EventHotKeyID(signature: OSType(0x46534B4E /* "FSKN" */), id: 1)
-        RegisterEventHotKey(keyCode, modifiers, hotKeyID,
-                            GetApplicationEventTarget(), 0, &hotKeyRef)
     }
 
     func unregister() {
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
-        if let eventHandler { RemoveEventHandler(eventHandler) }
         hotKeyRef = nil
-        eventHandler = nil
     }
 }

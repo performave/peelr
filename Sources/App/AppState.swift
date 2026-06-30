@@ -5,6 +5,12 @@ import AppKit
 @available(macOS 14.0, *)
 @MainActor
 final class AppState: ObservableObject {
+    static let shared = AppState()
+
+    init() {
+        AppState.sharedForHotKey = self
+    }
+
     @Published var sourceImage: NSImage?
     @Published var resultImage: NSImage?
     @Published var settings: RemovalSettings = .default
