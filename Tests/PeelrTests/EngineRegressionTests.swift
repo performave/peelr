@@ -15,17 +15,30 @@ final class EngineRegressionTests: XCTestCase {
         XCTAssertEqual(ModeDetector.detect(image), .slide)
     }
 
-    func testAutoModeDetectsBusyBorderAsPhoto() throws {
-        let image = try makeImage(width: 16, height: 16) { x, y in
-            let border = x == 0 || y == 0 || x == 15 || y == 15
-            if border {
-                let value = UInt8(((x * 47) + (y * 83)) % 256)
-                return (value, UInt8(255 - value), UInt8((Int(value) * 3) % 256), 255)
-            }
-            return (128, 128, 128, 255)
+    func testAutoModeDetectsNoisyTexturedImageAsPhoto() throws {
+        // A photograph: a rich palette with sensor-like per-pixel noise everywhere and no single
+        // flat background color — the opposite of a rendered slide/screenshot.
+        var seed: UInt64 = 0x9E3779B97F4A7C15
+        func rand() -> UInt8 {
+            seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17
+            return UInt8(seed & 0xFF)
+        }
+        let image = try makeImage(width: 96, height: 96) { _, _ in
+            (rand(), rand(), rand(), 255)
         }
 
         XCTAssertEqual(ModeDetector.detect(image), .photo)
+    }
+
+    func testAutoModeDetectsFlatBackgroundScreenshotAsSlide() throws {
+        // A code screenshot: flat, noise-free background with hard-edged text-like marks that run
+        // all the way to the borders. The old border-ring heuristic mislabeled this as a photo.
+        let image = try makeImage(width: 96, height: 96) { x, y in
+            let ink = (y % 12 < 3) && (x % 7 < 5)   // dense "text" rows reaching every edge
+            return ink ? (40, 40, 60, 255) : (250, 250, 250, 255)
+        }
+
+        XCTAssertEqual(ModeDetector.detect(image), .slide)
     }
 
     func testColorKeyRemovesEnclosedBackgroundWhenInteriorProtectionIsDisabled() throws {
