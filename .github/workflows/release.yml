@@ -14,7 +14,7 @@ name: release
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9]*.[0-9]*.[0-9]*"
   workflow_dispatch:
     inputs:
       tag:
@@ -31,8 +31,16 @@ jobs:
   release:
     runs-on: macos-latest
     steps:
+      - name: Validate SemVer tag
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must be SemVer, for example v1.2.3 or v1.2.3-beta.1."
+            exit 1
+          fi
+
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_TAG }}
 
@@ -40,7 +48,7 @@ jobs:
         run: brew install xcodegen
 
       - name: Import Apple signing certificate
-        uses: apple-actions/import-codesign-certs@v7.0.0
+        uses: apple-actions/import-codesign-certs@v7
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -126,11 +134,12 @@ jobs:
           if [ -s "$NOTES_FILE" ]; then
             echo "file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
           else
-            echo "file=" >> "$GITHUB_OUTPUT"
+            echo "CHANGELOG.md must contain a release section headed: ## [${VERSION}]"
+            exit 1
           fi
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: Peelr ${{ steps.archive.outputs.version }}
@@ -138,7 +147,6 @@ jobs:
             ${{ steps.archive.outputs.archive }}
             ${{ steps.archive.outputs.checksum }}
           body_path: ${{ steps.notes.outputs.file }}
-          generate_release_notes: ${{ steps.notes.outputs.file == '' }}
 
       - name: Bump Homebrew tap cask
         env:
