@@ -38,7 +38,7 @@ Every release must have a matching `CHANGELOG.md` section:
 - New release note.
 ```
 
-The workflow extracts that section and uses it as the GitHub Release body. If the section is missing or empty, the release fails.
+The workflow validates that section exists, then extracts that section with a small auditable shell step and uses it as the GitHub Release body. If the section is missing or empty, the release fails.
 
 ## What the Workflow Does
 
@@ -53,7 +53,7 @@ On a valid release tag, the workflow:
 7. Signs the app with hardened runtime and timestamp.
 8. Notarizes and staples the app.
 9. Zips `Peelr.app` and writes a `.sha256` checksum.
-10. Creates a GitHub Release using the changelog section as the body.
+10. Extracts release notes from `CHANGELOG.md` and creates a GitHub Release using those notes as the body.
 11. Updates the `peelr` cask in `Performave/homebrew-tap` if `HOMEBREW_TAP_TOKEN` is configured.
 
 ## Homebrew Cask

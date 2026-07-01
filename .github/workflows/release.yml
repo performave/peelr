@@ -115,21 +115,27 @@ jobs:
           echo "checksum=$RUNNER_TEMP/${ASSET}.sha256" >> "$GITHUB_OUTPUT"
           echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
 
-      - name: Extract changelog notes
-        id: notes
+      - name: Validate changelog section
         run: |
           set -euo pipefail
           VERSION="${RELEASE_TAG#v}"
-          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          if ! grep -Fqx "## [${VERSION}]" CHANGELOG.md; then
+            echo "CHANGELOG.md must contain a release section headed: ## [${VERSION}]"
+            exit 1
+          fi
+
+      - name: Extract changelog notes
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
           awk -v h="## [${VERSION}]" '
             index($0, h) == 1 { capture = 1; next }
             capture && /^## / { exit }
             capture { print }
-          ' CHANGELOG.md | sed '/./,$!d' > "$NOTES_FILE"
-          if [ -s "$NOTES_FILE" ]; then
-            echo "file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
-          else
-            echo "CHANGELOG.md must contain a release section headed: ## [${VERSION}]"
+          ' CHANGELOG.md | sed '/./,$!d' > RELEASE_NOTES.md
+
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "Extracted changelog notes are empty."
             exit 1
           fi
 
@@ -141,7 +147,7 @@ jobs:
           files: |
             ${{ steps.archive.outputs.archive }}
             ${{ steps.archive.outputs.checksum }}
-          body_path: ${{ steps.notes.outputs.file }}
+          body_path: RELEASE_NOTES.md
 
       - name: Bump Homebrew tap cask
         env:
