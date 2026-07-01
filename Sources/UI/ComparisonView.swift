@@ -159,7 +159,9 @@ private struct TransformedImage: View {
                 .offset(offset)
                 .padding(8)
         } else {
-            Text(placeholder).foregroundStyle(.secondary)
+            Text(placeholder)
+                .font(.title3)
+                .foregroundStyle(.secondary)
         }
     }
 }
