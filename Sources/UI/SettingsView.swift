@@ -3,32 +3,82 @@ import UniformTypeIdentifiers
 
 @available(macOS 14.0, *)
 struct SettingsView: View {
+    var body: some View {
+        TabView {
+            Form { GlobalHotkeySection() }
+                .formStyle(.grouped)
+                .tabItem { Label("General", systemImage: "gearshape") }
+
+            Form {
+                BackgroundRemovalSection()
+                PhotoModelSection()
+            }
+            .formStyle(.grouped)
+            .tabItem { Label("Removal", systemImage: "scissors") }
+
+            Form { NotificationsSection() }
+                .formStyle(.grouped)
+                .tabItem { Label("Notifications", systemImage: "bell") }
+        }
+        .frame(width: 560, height: 440)
+    }
+}
+
+/// Global hotkey configuration.
+@available(macOS 14.0, *)
+private struct GlobalHotkeySection: View {
     @EnvironmentObject var hotKeys: HotKeyStore
 
     var body: some View {
-        Form {
-            Section("Global Hotkey") {
-                Toggle("Enable global hotkey", isOn: Binding(
-                    get: { hotKeys.config.enabled },
-                    set: { hotKeys.config.enabled = $0 }
-                ))
-                HStack {
-                    Text("Shortcut")
-                    Spacer()
-                    HotKeyRecorder(config: $hotKeys.config)
-                        .disabled(!hotKeys.config.enabled)
-                }
-                Text("Processes the image on the clipboard in place. Works system-wide; no Accessibility permission required.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        Section("Global Hotkey") {
+            Toggle("Enable global hotkey", isOn: Binding(
+                get: { hotKeys.config.enabled },
+                set: { hotKeys.config.enabled = $0 }
+            ))
+            HStack {
+                Text("Shortcut")
+                Spacer()
+                HotKeyRecorder(config: $hotKeys.config)
+                    .disabled(!hotKeys.config.enabled)
             }
-
-            PhotoModelSection()
-
-            NotificationsSection()
+            Text("Processes the image on the clipboard in place. Works system-wide; no Accessibility permission required.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-        .formStyle(.grouped)
-        .frame(width: 460)
+    }
+}
+
+/// Background-removal settings, editable without opening the editor window. Bound to the
+/// persisted `AppState.settings`, so the global hotkey, menu-bar button, and clipboard
+/// Shortcuts action all use these values.
+@available(macOS 14.0, *)
+private struct BackgroundRemovalSection: View {
+    @EnvironmentObject var state: AppState
+
+    var body: some View {
+        Section("Background Removal") {
+            Picker("Mode", selection: $state.settings.mode) {
+                ForEach(RemovalMode.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            VStack(alignment: .leading) {
+                Text("Tolerance: \(Int(state.settings.tolerance))")
+                Slider(value: $state.settings.tolerance, in: 1...100)
+            }
+            VStack(alignment: .leading) {
+                Text("Edge feather: \(state.settings.feather, specifier: "%.1f") px")
+                Slider(value: $state.settings.feather, in: 0...8)
+            }
+            Toggle("Protect interior content", isOn: $state.settings.protectInterior)
+                .help("Only remove background connected to the edges. Leaves enclosed regions (like the inside of letters) intact.")
+
+            Text("Applies to the global hotkey, menu-bar button, and clipboard action. Tolerance and feather affect Slide (color-key) mode.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
