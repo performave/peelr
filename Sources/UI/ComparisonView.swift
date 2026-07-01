@@ -57,7 +57,7 @@ private struct ComparisonCanvas: View {
         case .sideBySide:
             HStack(spacing: 6) {
                 pane(title: "Original", image: original, placeholder: "Drop image here")
-                pane(title: "Result", image: result, placeholder: "—")
+                pane(title: "Result", image: result, placeholder: "Result appears here")
             }
         case .reveal:
             revealPane
@@ -81,7 +81,7 @@ private struct ComparisonCanvas: View {
                         Rectangle().frame(width: geo.size.width * revealFraction)
                     }
                 // After (result, over its own checkerboard) on the right.
-                layer(image: result, placeholder: "—")
+                layer(image: result, placeholder: "Result appears here")
                     .mask(alignment: .trailing) {
                         Rectangle().frame(width: geo.size.width * (1 - revealFraction))
                     }
@@ -160,7 +160,7 @@ private struct TransformedImage: View {
                 .padding(8)
         } else {
             Text(placeholder)
-                .font(.title3)
+                .font(.title)
                 .foregroundStyle(.secondary)
         }
     }
