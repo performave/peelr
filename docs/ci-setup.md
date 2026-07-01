@@ -1,6 +1,6 @@
 # CI Setup
 
-This is the one-time setup required for the test and release workflows.
+This is the one-time setup required for the test, release, and Sparkle update publishing workflows.
 
 ## Test Workflow
 
@@ -14,7 +14,7 @@ No secrets are required for tests.
 
 ## Release Workflow Requirements
 
-The [`release` workflow](../.github/workflows/release.yml) builds, signs, notarizes, publishes a GitHub Release, and updates the Homebrew cask. It requires an Apple Developer Program membership and repo admin access to configure secrets.
+The [`release` workflow](../.github/workflows/release.yml) builds, signs, notarizes, publishes a GitHub Release, and updates the Homebrew cask. Sparkle update publishing also generates and uploads an appcast as a release asset. It requires an Apple Developer Program membership and repo admin access to configure secrets.
 
 ## Apple Signing Certificate
 
@@ -42,6 +42,49 @@ Use an App Store Connect API key for notarization.
 4. Record the Key ID and Issuer ID.
 5. Download the `AuthKey_XXXXXXXX.p8` file. It can only be downloaded once.
 
+## Sparkle Update Signing
+
+Sparkle update signing is separate from Apple Developer ID signing. Apple signing proves the app came from the Developer ID certificate holder; Sparkle signing proves the downloaded update archive and appcast are the update feed Peelr intended to publish.
+
+There is no official Sparkle-maintained GitHub Action for this. Use Sparkle's own command-line tools from the Sparkle distribution in the existing macOS release workflow instead.
+
+Generate the Sparkle EdDSA keypair once on a trusted Mac:
+
+```sh
+./bin/generate_keys
+```
+
+The tool prints a public key for the app's `Info.plist`:
+
+```xml
+<key>SUPublicEDKey</key>
+<string>public-key-from-generate-keys</string>
+```
+
+Export the private key for GitHub Actions:
+
+```sh
+./bin/generate_keys -x sparkle_private_key.txt
+```
+
+Store `sparkle_private_key.txt` somewhere secure, then add its contents as the `SPARKLE_PRIVATE_KEY` GitHub Actions secret. Do not commit the private key.
+
+The release workflow should pass the key to Sparkle without writing it to the repository, for example:
+
+```sh
+printf '%s' "$SPARKLE_PRIVATE_KEY" | ./bin/generate_appcast \
+  --ed-key-file - \
+  --download-url-prefix "https://github.com/Performave/Peelr/releases/download/${RELEASE_TAG}/" \
+  -o appcast.xml \
+  path/to/release-assets
+```
+
+Upload the generated `appcast.xml` with the GitHub Release assets. Peelr's `SUFeedURL` should point at the appcast URL users can fetch over HTTPS, for example:
+
+```text
+https://github.com/Performave/Peelr/releases/latest/download/appcast.xml
+```
+
 ## GitHub Actions Secrets
 
 Add these secrets in the Peelr repo under **Settings** -> **Secrets and variables** -> **Actions**.
@@ -54,6 +97,7 @@ Add these secrets in the Peelr repo under **Settings** -> **Secrets and variable
 | `APPLE_API_KEY` | App Store Connect Key ID |
 | `APPLE_API_ISSUER` | App Store Connect Issuer ID |
 | `APPLE_API_PRIVATE_KEY` | Raw contents of `AuthKey_XXXX.p8`, including BEGIN and END lines |
+| `SPARKLE_PRIVATE_KEY` | Exported Sparkle EdDSA private key from `generate_keys -x` |
 | `HOMEBREW_TAP_TOKEN` | Fine-grained PAT with `contents:write` on `Performave/homebrew-tap` |
 
 Using `gh`:
@@ -65,6 +109,7 @@ gh secret set APPLE_SIGNING_IDENTITY --body 'Developer ID Application: Performav
 gh secret set APPLE_API_KEY --body 'ABC123DEF4'
 gh secret set APPLE_API_ISSUER --body '00000000-0000-0000-0000-000000000000'
 gh secret set APPLE_API_PRIVATE_KEY < AuthKey_ABC123DEF4.p8
+gh secret set SPARKLE_PRIVATE_KEY < sparkle_private_key.txt
 gh secret set HOMEBREW_TAP_TOKEN --body 'github_pat_...'
 ```
 
@@ -87,5 +132,7 @@ The workflow stores this as `HOMEBREW_TAP_TOKEN` and uses it to clone and push t
 | Certificate import fails | Bad `.p12` base64 or wrong export password |
 | `codesign` cannot find identity | `APPLE_SIGNING_IDENTITY` does not match `security find-identity` exactly |
 | Notarization auth fails | Wrong App Store Connect key, issuer, or incomplete `.p8` content |
+| Sparkle appcast generation fails | Missing or malformed `SPARKLE_PRIVATE_KEY`, wrong Sparkle tool path, or release archive not present in the appcast input directory |
+| Sparkle update verification fails in app | `SUPublicEDKey` does not match `SPARKLE_PRIVATE_KEY`, the appcast URL is wrong, or the archive was changed after appcast generation |
 | Release stops before publishing | Tag is not SemVer or `CHANGELOG.md` lacks a matching release section |
 | Cask is not updated | `HOMEBREW_TAP_TOKEN` is missing or lacks write access to `Performave/homebrew-tap` |
