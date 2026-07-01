@@ -1,0 +1,45 @@
+name: Bug Report
+description: Report something that is broken or behaving unexpectedly.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report a problem with Peelr.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Copy/open this kind of image...
+        2. Run Peelr via...
+        3. See...
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: macOS 14.6
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, sample images, logs, or anything else that helps.
+  - type: checkboxes
+    id: acknowledgement
+    attributes:
+      label: Maintainer availability
+      options:
+        - label: I understand the maintainers may not respond to or address this issue because this project is built for their personal needs while being shared to help others in similar situations.
+          required: true

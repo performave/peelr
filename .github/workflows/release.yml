@@ -1,0 +1,180 @@
+name: release
+
+# Build, Developer ID sign, notarize, publish, and bump the Homebrew tap.
+#
+# Required secrets:
+#   APPLE_CERTIFICATE           base64 exported Developer ID Application .p12
+#   APPLE_CERTIFICATE_PASSWORD  password for the exported .p12
+#   APPLE_SIGNING_IDENTITY      e.g. Developer ID Application: Performave (TEAMID)
+#   APPLE_API_KEY               App Store Connect API key id
+#   APPLE_API_ISSUER            App Store Connect issuer UUID
+#   APPLE_API_PRIVATE_KEY       raw AuthKey_XXXX.p8 PEM contents
+#   HOMEBREW_TAP_TOKEN          token with contents:write on Performave/homebrew-tap
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build, e.g. v1.0.0
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Import Apple signing certificate
+        uses: apple-actions/import-codesign-certs@v7.0.0
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project Peelr.xcodeproj \
+            -scheme Peelr \
+            -configuration Release \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO
+          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release/Peelr.app"
+          test -d "$APP_PATH"
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+
+      - name: Codesign
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          codesign --force --deep --timestamp --options runtime \
+            --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+      - name: Prepare App Store Connect API key
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          API_KEY_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY}.p8"
+          printf '%s\n' "$APPLE_API_PRIVATE_KEY" > "$API_KEY_PATH"
+          echo "APPLE_API_KEY_PATH=$API_KEY_PATH" >> "$GITHUB_ENV"
+
+      - name: Notarize and staple
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          NOTARY_ZIP="$RUNNER_TEMP/Peelr-notarize.zip"
+          ditto -c -k --keepParent "$APP_PATH" "$NOTARY_ZIP"
+          xcrun notarytool submit "$NOTARY_ZIP" \
+            --key "$APPLE_API_KEY_PATH" \
+            --key-id "$APPLE_API_KEY" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait
+          xcrun stapler staple "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+
+      - name: Assemble archive
+        id: archive
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          ASSET="Peelr-${VERSION}.zip"
+          ARCHIVE="$RUNNER_TEMP/${ASSET}"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ARCHIVE"
+          SHA256="$(shasum -a 256 "$ARCHIVE" | cut -d' ' -f1)"
+          printf '%s  %s\n' "$SHA256" "$ASSET" > "$RUNNER_TEMP/${ASSET}.sha256"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "asset=${ASSET}" >> "$GITHUB_OUTPUT"
+          echo "archive=${ARCHIVE}" >> "$GITHUB_OUTPUT"
+          echo "checksum=$RUNNER_TEMP/${ASSET}.sha256" >> "$GITHUB_OUTPUT"
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract changelog notes
+        id: notes
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          awk -v h="## [${VERSION}]" '
+            index($0, h) == 1 { capture = 1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md | sed '/./,$!d' > "$NOTES_FILE"
+          if [ -s "$NOTES_FILE" ]; then
+            echo "file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+          else
+            echo "file=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Peelr ${{ steps.archive.outputs.version }}
+          files: |
+            ${{ steps.archive.outputs.archive }}
+            ${{ steps.archive.outputs.checksum }}
+          body_path: ${{ steps.notes.outputs.file }}
+          generate_release_notes: ${{ steps.notes.outputs.file == '' }}
+
+      - name: Bump Homebrew tap cask
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          TAG: ${{ env.RELEASE_TAG }}
+          ASSET: ${{ steps.archive.outputs.asset }}
+          SHA256: ${{ steps.archive.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HOMEBREW_TAP_TOKEN:-}" ]; then
+            echo "HOMEBREW_TAP_TOKEN not set; skipping tap bump."
+            exit 0
+          fi
+
+          TAP_REPO="Performave/homebrew-tap"
+          CASK="Casks/peelr.rb"
+          VERSION="${TAG#v}"
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ASSET}"
+
+          git clone --depth 1 \
+            "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${TAP_REPO}.git" tap
+          cd tap
+
+          sed -i '' -E \
+            -e "s|^  version \".*\"|  version \"${VERSION}\"|" \
+            -e "s|^  sha256 .*|  sha256 \"${SHA256}\"|" \
+            -e "s|^  url \".*\"|  url \"${URL}\"|" \
+            "${CASK}"
+
+          if git diff --quiet -- "${CASK}"; then
+            echo "Cask already up to date; nothing to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${CASK}"
+          git commit -m "peelr ${VERSION}"
+          git push

@@ -37,11 +37,15 @@ final class HotKeyStore: ObservableObject {
     init() {
         let d = UserDefaults.standard
         if d.object(forKey: Keys.keyCode) != nil {
+            let keyCode = UInt32(d.integer(forKey: Keys.keyCode))
+            let modifiers = UInt32(d.integer(forKey: Keys.modifiers))
             config = HotKeyConfig(
                 enabled: d.bool(forKey: Keys.enabled),
-                keyCode: UInt32(d.integer(forKey: Keys.keyCode)),
-                carbonModifiers: UInt32(d.integer(forKey: Keys.modifiers)),
-                display: d.string(forKey: Keys.display) ?? HotKeyConfig.default.display
+                keyCode: keyCode,
+                carbonModifiers: modifiers,
+                // Recompute from the key code so older saves with a shifted glyph
+                // (e.g. "$" instead of "4") are corrected in place.
+                display: HotKeyFormatting.display(carbonModifiers: modifiers, keyCode: keyCode)
             )
         } else {
             config = .default
@@ -75,13 +79,71 @@ enum HotKeyFormatting {
         return carbon
     }
 
-    static func display(flags: NSEvent.ModifierFlags, keyCharacters: String?) -> String {
+    static func modifierFlags(fromCarbon carbon: UInt32) -> NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if carbon & UInt32(cmdKey) != 0 { flags.insert(.command) }
+        if carbon & UInt32(optionKey) != 0 { flags.insert(.option) }
+        if carbon & UInt32(controlKey) != 0 { flags.insert(.control) }
+        if carbon & UInt32(shiftKey) != 0 { flags.insert(.shift) }
+        return flags
+    }
+
+    static func display(carbonModifiers: UInt32, keyCode: UInt32) -> String {
+        display(flags: modifierFlags(fromCarbon: carbonModifiers), keyCode: keyCode)
+    }
+
+    static func display(flags: NSEvent.ModifierFlags, keyCode: UInt32) -> String {
         var s = ""
         if flags.contains(.control) { s += "⌃" }
         if flags.contains(.option) { s += "⌥" }
         if flags.contains(.shift) { s += "⇧" }
         if flags.contains(.command) { s += "⌘" }
-        s += (keyCharacters ?? "?").uppercased()
+        s += keyLabel(for: keyCode)
         return s
     }
+
+    /// Human-readable label for a virtual key code, ignoring modifiers so the base
+    /// key is shown (e.g. "4" rather than the shifted "$").
+    static func keyLabel(for keyCode: UInt32) -> String {
+        if let named = specialKeys[Int(keyCode)] { return named }
+
+        guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+              let layoutPtr = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
+            return "?"
+        }
+        let layoutData = unsafeBitCast(layoutPtr, to: CFData.self)
+        let keyLayout = unsafeBitCast(CFDataGetBytePtr(layoutData), to: UnsafePointer<UCKeyboardLayout>.self)
+
+        var deadKeyState: UInt32 = 0
+        var chars = [UniChar](repeating: 0, count: 4)
+        var length = 0
+        let status = UCKeyTranslate(keyLayout, UInt16(keyCode), UInt16(kUCKeyActionDisplay),
+                                    0, UInt32(LMGetKbdType()),
+                                    OptionBits(kUCKeyTranslateNoDeadKeysBit),
+                                    &deadKeyState, chars.count, &length, &chars)
+        guard status == noErr, length > 0 else { return "?" }
+        return String(utf16CodeUnits: chars, count: length).uppercased()
+    }
+
+    /// Keys whose label isn't a printable character.
+    private static let specialKeys: [Int: String] = [
+        kVK_Space: "Space",
+        kVK_Return: "↩",
+        kVK_ANSI_KeypadEnter: "⌤",
+        kVK_Tab: "⇥",
+        kVK_Delete: "⌫",
+        kVK_ForwardDelete: "⌦",
+        kVK_Escape: "⎋",
+        kVK_LeftArrow: "←",
+        kVK_RightArrow: "→",
+        kVK_UpArrow: "↑",
+        kVK_DownArrow: "↓",
+        kVK_Home: "↖",
+        kVK_End: "↘",
+        kVK_PageUp: "⇞",
+        kVK_PageDown: "⇟",
+        kVK_F1: "F1", kVK_F2: "F2", kVK_F3: "F3", kVK_F4: "F4",
+        kVK_F5: "F5", kVK_F6: "F6", kVK_F7: "F7", kVK_F8: "F8",
+        kVK_F9: "F9", kVK_F10: "F10", kVK_F11: "F11", kVK_F12: "F12",
+    ]
 }

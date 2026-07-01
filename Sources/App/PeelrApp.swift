@@ -33,6 +33,11 @@ struct PeelrApp: App {
             SettingsLink {
                 Text("Settings…")
             }
+            Button("Welcome to Peelr…") {
+                NSApp.activate(ignoringOtherApps: true)
+                openMainWindow()
+                state.showOnboarding()
+            }
             Divider()
             Button("Quit") { NSApp.terminate(nil) }
         }

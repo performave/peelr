@@ -44,3 +44,29 @@ targets:
       - sdk: Carbon.framework
       - sdk: AppKit.framework
       - sdk: CoreML.framework
+
+  PeelrTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+      - path: Sources/Engine/ImageCompositing.swift
+      - path: Sources/Engine/ColorKeyMatter.swift
+      - path: Sources/Engine/ModeDetector.swift
+      - path: Sources/Engine/Matter.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.performave.peelr.tests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - sdk: AppKit.framework
+      - sdk: CoreImage.framework
+
+schemes:
+  Peelr:
+    build:
+      targets:
+        Peelr: all
+    test:
+      targets:
+        - PeelrTests

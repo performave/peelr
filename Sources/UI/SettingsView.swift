@@ -59,8 +59,7 @@ struct HotKeyRecorder: View {
                 enabled: config.enabled,
                 keyCode: UInt32(event.keyCode),
                 carbonModifiers: HotKeyFormatting.carbonModifiers(from: mods),
-                display: HotKeyFormatting.display(flags: mods,
-                                                  keyCharacters: event.charactersIgnoringModifiers)
+                display: HotKeyFormatting.display(flags: mods, keyCode: UInt32(event.keyCode))
             )
             stop()
             return nil // swallow the event

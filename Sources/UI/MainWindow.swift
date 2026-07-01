@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 struct MainWindow: View {
     @EnvironmentObject var state: AppState
     @State private var compareMode: CompareMode = .sideBySide
+    @AppStorage("app.hasSeenOnboarding") private var hasSeenOnboarding = false
+    @State private var showOnboarding = false
 
     var body: some View {
         HSplitView {
@@ -14,6 +16,18 @@ struct MainWindow: View {
                 .frame(width: 260)
         }
         .frame(minWidth: 720, minHeight: 460)
+        .sheet(isPresented: $showOnboarding) {
+            OnboardingView {
+                hasSeenOnboarding = true
+                showOnboarding = false
+            }
+        }
+        .onAppear {
+            if !hasSeenOnboarding { showOnboarding = true }
+        }
+        .onChange(of: state.onboardingRequestID) { _, _ in
+            showOnboarding = true
+        }
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("Compare", selection: $compareMode) {

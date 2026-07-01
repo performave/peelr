@@ -18,7 +18,15 @@ final class AppState: ObservableObject {
     @Published var statusMessage: String = "Drop an image, or use the clipboard."
     @Published var lastResolvedMode: RemovalMode?
 
+    /// Incremented to request that the main window re-show the onboarding sheet.
+    @Published var onboardingRequestID = 0
+
     private var resultPNG: Data?
+
+    /// Ask the main window to present the onboarding tour (from the menu bar).
+    func showOnboarding() {
+        onboardingRequestID += 1
+    }
 
     /// Load an image into the editor (from drop, file, or clipboard).
     func load(_ image: NSImage) {

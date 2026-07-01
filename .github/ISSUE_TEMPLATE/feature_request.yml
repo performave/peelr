@@ -1,0 +1,32 @@
+name: Feature Request
+description: Suggest an improvement or new behavior.
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow or limitation would this address?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like Peelr to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional workarounds or different approaches.
+  - type: checkboxes
+    id: acknowledgement
+    attributes:
+      label: Maintainer availability
+      options:
+        - label: I understand the maintainers may not respond to or address this issue because this project is built for their personal needs while being shared to help others in similar situations.
+          required: true
