@@ -22,9 +22,6 @@ targets:
     platform: macOS
     sources:
       - path: Sources
-    resources:
-      - path: Resources
-        optional: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.performave.peelr
@@ -44,6 +41,8 @@ targets:
       - sdk: Carbon.framework
       - sdk: AppKit.framework
       - sdk: CoreML.framework
+      - sdk: UserNotifications.framework
+      - sdk: AVFoundation.framework
 
   PeelrTests:
     type: bundle.unit-test

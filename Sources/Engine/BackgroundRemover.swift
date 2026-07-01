@@ -59,5 +59,18 @@ final class BackgroundRemover {
         return png
     }
 
-    enum RemoverError: Error { case invalidImage, compositionFailed }
+    /// Release the in-memory photo model (after its cache is deleted).
+    func unloadPhotoModel() { biRefNet.unload() }
+
+    enum RemoverError: LocalizedError {
+        case invalidImage, compositionFailed
+        var errorDescription: String? {
+            switch self {
+            case .invalidImage:
+                return "That image couldn't be read. Try a PNG, JPEG, or a fresh screenshot."
+            case .compositionFailed:
+                return "Couldn't compose the transparent result. Try again or use a different image."
+            }
+        }
+    }
 }

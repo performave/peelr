@@ -49,6 +49,8 @@ def main():
 
     print(f"Loading {args.repo} …")
     base = AutoModelForImageSegmentation.from_pretrained(args.repo, trust_remote_code=True)
+    # Some BiRefNet checkpoints load in half precision; the Core ML trace needs float32.
+    base = base.float()
     base.eval()
 
     model = BiRefNetWrapper(base).eval()

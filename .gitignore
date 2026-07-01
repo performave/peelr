@@ -12,9 +12,9 @@ xcuserdata/
 __pycache__/
 *.pyc
 
-# Large Core ML model (regenerate via scripts/convert_birefnet.py)
-Resources/BiRefNet.mlpackage
-Resources/BiRefNet.mlmodelc
+# Large Core ML model, if generated locally via scripts/convert_birefnet.py.
+# The app downloads + caches the model at runtime; this dir is not bundled.
+Resources/
 
 # macOS
 .DS_Store

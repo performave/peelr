@@ -6,6 +6,7 @@ struct PeelrApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var state = AppState.shared
     @StateObject private var hotKeys = HotKeyStore.shared
+    @StateObject private var notifySettings = NotificationSettings.shared
 
     var body: some Scene {
         Window("Peelr", id: "main") {
@@ -16,7 +17,9 @@ struct PeelrApp: App {
 
         Settings {
             SettingsView()
+                .environmentObject(state)
                 .environmentObject(hotKeys)
+                .environmentObject(notifySettings)
         }
 
         MenuBarExtra("Peelr", systemImage: "scissors") {

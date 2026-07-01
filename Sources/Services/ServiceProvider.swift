@@ -20,6 +20,7 @@ final class ServiceProvider: NSObject {
             let png = try BackgroundRemover.shared.processToPNG(image, settings: RemovalSettings())
             pboard.clearContents()
             pboard.setData(png, forType: .png)
+            NotificationManager.shared.notifyConversionComplete(channel: .services)
         } catch {
             errorPtr?.pointee = "Peelr could not process the image." as NSString
         }

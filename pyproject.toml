@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "BiRefNet -> Core ML conversion tooling for the Peelr macOS app"
 requires-python = ">=3.10"
 dependencies = [
-    "torch>=2.2",
+    "torch>=2.2,<2.8",
     "torchvision>=0.17",
     "coremltools>=8.0",
     "transformers>=4.40",
@@ -12,6 +12,7 @@ dependencies = [
     "numpy>=1.26",
     "einops>=0.7",
     "timm>=0.9",
+    "kornia>=0.7",
 ]
 
 [project.scripts]

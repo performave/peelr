@@ -40,6 +40,7 @@ struct RemoveBackgroundIntent: AppIntent {
         settings.mode = mode.removalMode
         settings.tolerance = tolerance
         let png = try BackgroundRemover.shared.processToPNG(nsImage, settings: settings)
+        NotificationManager.shared.notifyConversionComplete(channel: .shortcuts)
         let name = (image.filename as NSString?)?.deletingPathExtension ?? "image"
         let file = IntentFile(data: png, filename: "\(name)-nobg.png", type: .png)
         return .result(value: file)
@@ -60,8 +61,9 @@ struct RemoveBackgroundFromClipboardIntent: AppIntent {
         guard let nsImage = PasteboardService.readImage() else {
             throw RemoveBackgroundError.noClipboardImage
         }
-        let png = try BackgroundRemover.shared.processToPNG(nsImage, settings: RemovalSettings())
+        let png = try BackgroundRemover.shared.processToPNG(nsImage, settings: RemovalSettingsStore.load())
         PasteboardService.writePNG(png)
+        NotificationManager.shared.notifyConversionComplete(channel: .shortcuts)
         return .result()
     }
 }

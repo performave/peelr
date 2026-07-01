@@ -55,7 +55,7 @@ final class HotKeyStore: ObservableObject {
     /// Register the current hotkey (called at launch and on every change).
     func apply() {
         HotKeyManager.shared.update(config) {
-            AppState.sharedForHotKey?.processClipboard()
+            AppState.sharedForHotKey?.processClipboard(channel: .hotkey)
         }
     }
 

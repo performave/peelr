@@ -7,7 +7,16 @@ import CoreGraphics
 @available(macOS 14.0, *)
 struct VisionSubjectMatter: Matter {
 
-    enum VisionError: Error { case noForeground }
+    enum VisionError: LocalizedError {
+        case noForeground
+        var errorDescription: String? {
+            switch self {
+            case .noForeground:
+                return "No subject detected. For slides or screenshots, switch to Slide mode; "
+                     + "for photos, use an image with a clear, distinct subject."
+            }
+        }
+    }
 
     func matte(_ source: CGImage, settings: RemovalSettings) throws -> CIImage {
         let request = VNGenerateForegroundInstanceMaskRequest()
