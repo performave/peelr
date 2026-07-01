@@ -30,7 +30,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.performave.peelr
         PRODUCT_NAME: Peelr
         INFOPLIST_KEY_CFBundleDisplayName: Peelr
-        INFOPLIST_KEY_LSUIElement: NO
+        INFOPLIST_KEY_LSUIElement: YES
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_FILE: Info.plist
