@@ -21,6 +21,29 @@ final class AppState: ObservableObject {
     @Published var isProcessing = false
     @Published var statusMessage: String = "Drop an image, or use the clipboard."
     @Published var lastResolvedMode: RemovalMode?
+    /// Engine that produced the current result (e.g. "BiRefNet", "Color-key", "Vision").
+    @Published var lastEngine: String?
+
+    /// The bottom status bar's cells, shown left→right divided by vertical rules. The transient
+    /// state message always leads; the mode/engine/size cells persist while a result is loaded.
+    var statusSegments: [String] {
+        var segments = [statusMessage]
+        if sourceImage != nil {
+            if let mode = lastResolvedMode { segments.append(mode.displayName) }
+            if let engine = lastEngine { segments.append(engine) }
+            if let size = sourceDimensionText { segments.append(size) }
+        }
+        return segments
+    }
+
+    /// Pixel dimensions of the loaded source image (highest-resolution representation).
+    private var sourceDimensionText: String? {
+        guard let rep = sourceImage?.representations
+            .compactMap({ $0 as? NSBitmapImageRep })
+            .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh })
+        else { return nil }
+        return "\(rep.pixelsWide) × \(rep.pixelsHigh)"
+    }
 
     /// Incremented to request that the main window re-show the onboarding sheet.
     @Published var onboardingRequestID = 0
@@ -34,6 +57,15 @@ final class AppState: ObservableObject {
     }
     @Published var modelState: ModelState =
         ModelStore.shared.readyModelURL != nil ? .ready : .notDownloaded
+
+    /// Progress surfaced on the Result pane: the model download reports a real fraction; an
+    /// inference pass is indeterminate (the bar trickles). See `TrickleProgressBar`.
+    var workProgress: WorkProgress {
+        if case .downloading(let fraction) = modelState {
+            return WorkProgress(active: true, fraction: fraction)
+        }
+        return WorkProgress(active: isProcessing, fraction: nil)
+    }
 
     private var resultPNG: Data?
 
@@ -54,7 +86,11 @@ final class AppState: ObservableObject {
     }
 
     /// Re-run the engine with current settings (called on load and slider changes).
-    func reprocess() {
+    ///
+    /// The heavy inference runs off the main actor via `Task.detached`, so the UI stays
+    /// responsive. Pass `copyToPasteboard`/`channel` for the clipboard path so the result
+    /// is written back and a completion notification is posted when inference finishes.
+    func reprocess(copyToPasteboard: Bool = false, channel: NotificationChannel? = nil) {
         guard let source = sourceImage,
               let cg = ImageCompositing.cgImage(from: source) else { return }
         let settings = self.settings
@@ -69,9 +105,19 @@ final class AppState: ObservableObject {
                     self.resultImage = nsImage
                     self.resultPNG = png
                     self.lastResolvedMode = out.resolvedMode
+                    self.lastEngine = out.usedBiRefNet
+                        ? "BiRefNet"
+                        : (out.resolvedMode == .slide ? "Color-key" : "Vision")
                     self.isProcessing = false
-                    let engine = out.usedBiRefNet ? "BiRefNet" : (out.resolvedMode == .slide ? "color-key" : "Vision")
-                    self.statusMessage = "Done · \(out.resolvedMode.displayName) · \(engine)"
+                    if copyToPasteboard, let png {
+                        PasteboardService.writePNG(png)
+                        if let channel {
+                            NotificationManager.shared.notifyConversionComplete(channel: channel)
+                        }
+                        self.statusMessage = "Copied to clipboard"
+                    } else {
+                        self.statusMessage = "Done"
+                    }
                     // Photo mode fell back to Vision because the high-quality model isn't
                     // downloaded yet. Fetch it now (once); reprocess when it's ready.
                     if out.resolvedMode == .photo && !out.usedBiRefNet {
@@ -103,12 +149,32 @@ final class AppState: ObservableObject {
                     }
                 }
                 modelState = .ready
-                statusMessage = "Photo model ready."
+                statusMessage = "Photo model ready"
                 if sourceImage != nil { reprocess() }
             } catch {
                 modelState = .failed(error.localizedDescription)
                 statusMessage = "Photo model unavailable: \(error.localizedDescription)"
             }
+        }
+    }
+
+    /// Decide whether a settings change actually alters the current result before paying for a
+    /// full reprocess. Tolerance and "protect interior" only affect the slide (color-key)
+    /// engine, so in photo/vision modes changing them would just re-run BiRefNet to produce an
+    /// identical image (the flicker users see when dragging those sliders). Mode and edge feather
+    /// affect every mode's output, so they always reprocess.
+    func settingsChanged(from old: RemovalSettings) {
+        let new = settings
+        guard new != old else { return }
+        if new.mode != old.mode || new.feather != old.feather {
+            reprocess()
+            return
+        }
+        let slideOnlyChanged = new.tolerance != old.tolerance
+            || new.protectInterior != old.protectInterior
+        let resolved = new.mode == .auto ? lastResolvedMode : new.mode
+        if slideOnlyChanged && resolved == .slide {
+            reprocess()
         }
     }
 
@@ -121,7 +187,7 @@ final class AppState: ObservableObject {
             try ModelStore.shared.deleteCache()
             BackgroundRemover.shared.unloadPhotoModel()
             modelState = .notDownloaded
-            statusMessage = "Photo model deleted."
+            statusMessage = "Photo model deleted"
         } catch {
             statusMessage = "Couldn't delete model: \(error.localizedDescription)"
         }
@@ -146,34 +212,31 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Process the current clipboard image in place. Used by hotkey, menu, and intent.
+    /// Process the current clipboard image in place. Used by hotkey, menu, and window button.
     /// Pass a `channel` to post a completion notification (nil for the in-window button).
+    ///
+    /// Inference runs off the main actor (see `reprocess`), so the UI never freezes. The
+    /// clipboard is overwritten and the editor is updated when processing finishes. The
+    /// return value only reports whether an image was found on the clipboard to start.
     @discardableResult
     func processClipboard(channel: NotificationChannel? = nil) -> Bool {
         guard let image = PasteboardService.readImage() else {
-            statusMessage = "No image on the clipboard."
+            statusMessage = "No image on the clipboard"
             return false
         }
-        do {
-            let png = try BackgroundRemover.shared.processToPNG(image, settings: settings)
-            PasteboardService.writePNG(png)
-            statusMessage = "Clipboard background removed."
-            if let channel {
-                NotificationManager.shared.notifyConversionComplete(channel: channel)
-            }
-            // Mirror into the editor for visual confirmation.
-            load(image)
-            return true
-        } catch {
-            statusMessage = "Clipboard failed: \(error.localizedDescription)"
-            return false
-        }
+        // Mirror into the editor and run a single inference that also writes the result back
+        // to the clipboard on completion (avoids a redundant second pass).
+        sourceImage = image
+        resultImage = nil
+        resultPNG = nil
+        reprocess(copyToPasteboard: true, channel: channel)
+        return true
     }
 
     func copyResult() {
         guard let resultPNG else { return }
         PasteboardService.writePNG(resultPNG)
-        statusMessage = "Copied transparent PNG to clipboard."
+        statusMessage = "Copied transparent PNG to clipboard"
     }
 
     func saveResult() {

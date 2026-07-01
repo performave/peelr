@@ -9,11 +9,14 @@ struct MainWindow: View {
     @State private var showOnboarding = false
 
     var body: some View {
-        HSplitView {
-            previews
-                .frame(minWidth: 360)
-            controls
-                .frame(width: 260)
+        VStack(spacing: 0) {
+            HSplitView {
+                previews
+                    .frame(minWidth: 360)
+                controls
+                    .frame(width: 260)
+            }
+            StatusBar(segments: state.statusSegments)
         }
         .frame(minWidth: 720, minHeight: 460)
         .sheet(isPresented: $showOnboarding) {
@@ -41,24 +44,21 @@ struct MainWindow: View {
                 Button {
                     state.processClipboard()
                 } label: {
-                    Label("From Clipboard", systemImage: "doc.on.clipboard")
+                    Label("Paste from Clipboard", systemImage: "doc.on.clipboard")
                 }
+                .labelStyle(.titleAndIcon)
+                .help("Remove the background from the image currently on your clipboard, then copy the transparent result back to the clipboard.")
             }
         }
     }
 
     private var previews: some View {
-        VStack(spacing: 8) {
-            ComparisonView(original: state.sourceImage,
-                           result: state.resultImage,
-                           mode: $compareMode)
-            Text(state.statusMessage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .padding(12)
-        .onDrop(of: [.image, .fileURL], isTargeted: nil, perform: handleDrop)
+        ComparisonView(original: state.sourceImage,
+                       result: state.resultImage,
+                       mode: $compareMode,
+                       progress: state.workProgress)
+            .padding(12)
+            .onDrop(of: [.image, .fileURL], isTargeted: nil, perform: handleDrop)
     }
 
     private var controls: some View {
@@ -100,8 +100,9 @@ struct MainWindow: View {
             }
         }
         .formStyle(.grouped)
-        .onChange(of: state.settings) { _, _ in
-            state.reprocess()
+        .padding(.horizontal, -8)
+        .onChange(of: state.settings) { old, _ in
+            state.settingsChanged(from: old)
         }
     }
 
@@ -128,5 +129,35 @@ struct MainWindow: View {
             return true
         }
         return false
+    }
+}
+
+/// A slim status bar along the bottom edge of the window (à la Finder/Xcode). Shows discrete
+/// fields — state, mode, engine, image size — in their own cells divided by vertical rules,
+/// rather than one dot-joined string. Keeps transient state out of the preview area.
+@available(macOS 14.0, *)
+private struct StatusBar: View {
+    let segments: [String]
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
+                if index > 0 {
+                    Divider().frame(height: 11)
+                }
+                Text(segment)
+                    .font(.caption)
+                    // The leading cell (transient state) reads a touch stronger than the
+                    // persistent metadata cells that follow it.
+                    .foregroundStyle(index == 0 ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 22)
+        .background(.bar)
+        .overlay(Divider(), alignment: .top)
+        .animation(.default, value: segments)
     }
 }
