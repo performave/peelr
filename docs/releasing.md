@@ -2,7 +2,7 @@
 
 Peelr releases are produced by the [`release` workflow](../.github/workflows/release.yml). Releases are cut only by pushing a valid SemVer tag.
 
-Read [CI setup](ci-setup.md) first if signed and notarized releases have never run for this repo.
+Read [CI setup](ci-setup.md) first if releases have never run for this repo. It covers the `MACOS_SIGNING` variable, which picks between an ad-hoc signature (the default, while there is no paid Apple Developer account), a certificate, and Developer ID with notarization.
 
 ## TL;DR
 
@@ -44,14 +44,14 @@ The workflow validates that section exists, then extracts that section with a sm
 
 On a valid release tag, the workflow:
 
-1. Validates the SemVer tag.
+1. Validates the SemVer tag, and reads the signing mode from `MACOS_SIGNING`. An unknown value stops the run.
 2. Checks out the tag.
 3. Installs XcodeGen.
-4. Imports the Developer ID Application certificate.
+4. Imports the signing certificate, unless the mode is `adhoc`.
 5. Generates the Xcode project.
 6. Builds `Peelr.app` in Release configuration.
-7. Signs the app with hardened runtime and timestamp.
-8. Notarizes and staples the app.
+7. Signs the app with hardened runtime. Under `signed` or `notarized` that uses the certificate and a timestamp. Under `adhoc` it is an ad-hoc signature.
+8. Notarizes and staples the app, only when the mode is `notarized`.
 9. Zips `Peelr.app` and writes a `.sha256` checksum.
 10. Extracts release notes from `CHANGELOG.md` and creates a GitHub Release using those notes as the body.
 11. Updates the `peelr` cask in `Performave/homebrew-tap` if `HOMEBREW_TAP_TOKEN` is configured.

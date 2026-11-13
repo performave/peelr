@@ -1,15 +1,27 @@
 name: release
 
-# Build, Developer ID sign, notarize, publish, and bump the Homebrew tap.
+# Build, sign, publish, and bump the Homebrew tap.
 #
-# Required secrets:
-#   APPLE_CERTIFICATE           base64 exported Developer ID Application .p12
-#   APPLE_CERTIFICATE_PASSWORD  password for the exported .p12
-#   APPLE_SIGNING_IDENTITY      e.g. Developer ID Application: Performave (TEAMID)
-#   APPLE_API_KEY               App Store Connect API key id
-#   APPLE_API_ISSUER            App Store Connect issuer UUID
-#   APPLE_API_PRIVATE_KEY       raw AuthKey_XXXX.p8 PEM contents
-#   HOMEBREW_TAP_TOKEN          token with contents:write on Performave/homebrew-tap
+# The MACOS_SIGNING repository variable (Settings > Secrets and variables >
+# Actions > Variables) picks the signature, so getting a paid Apple Developer
+# account back means changing a variable, not this file:
+#
+#   adhoc      Default, used when the variable is unset. Needs no certificate
+#              and reads no Apple secret. Gatekeeper refuses the app, so the
+#              tap's cask lifts the quarantine after installing it.
+#   signed     Signs with the certificate in APPLE_CERTIFICATE, with no
+#              notarization. Gatekeeper still refuses it, as with adhoc.
+#   notarized  Signs with a Developer ID Application certificate, notarizes,
+#              and staples. Needs a paid Apple Developer Program membership.
+#
+# Secrets, by mode (docs/ci-setup.md):
+#   APPLE_CERTIFICATE           signed, notarized: base64 of the exported .p12
+#   APPLE_CERTIFICATE_PASSWORD  signed, notarized: password for the .p12
+#   APPLE_SIGNING_IDENTITY      signed, notarized: e.g. Developer ID Application: Performave (TEAMID)
+#   APPLE_API_KEY               notarized: App Store Connect API key id
+#   APPLE_API_ISSUER            notarized: App Store Connect issuer UUID
+#   APPLE_API_PRIVATE_KEY       notarized: raw AuthKey_XXXX.p8 PEM contents
+#   HOMEBREW_TAP_TOKEN          all: token with contents:write on Performave/homebrew-tap
 
 on:
   push:
@@ -34,6 +46,24 @@ jobs:
             exit 1
           fi
 
+      # Checked before anything is built, so a typo in the variable fails here
+      # instead of being quietly treated as one of the modes.
+      - name: Choose signing mode
+        id: signing
+        env:
+          MODE: ${{ vars.MACOS_SIGNING || 'adhoc' }}
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            adhoc|signed|notarized) ;;
+            *)
+              echo "::error::MACOS_SIGNING is '$MODE'; expected adhoc, signed or notarized (docs/ci-setup.md)"
+              exit 1
+              ;;
+          esac
+          echo "mode=${MODE}" >> "$GITHUB_OUTPUT"
+          echo "Signing mode: ${MODE}"
+
       - name: Checkout
         uses: actions/checkout@v7
         with:
@@ -43,6 +73,7 @@ jobs:
         run: brew install xcodegen
 
       - name: Import Apple signing certificate
+        if: steps.signing.outputs.mode != 'adhoc'
         uses: apple-actions/import-codesign-certs@v7
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
@@ -64,16 +95,28 @@ jobs:
           test -d "$APP_PATH"
           echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
 
+      # An ad-hoc signature has no identity for Apple's timestamp server to
+      # vouch for, so it is made without a timestamp.
       - name: Codesign
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          MODE: ${{ steps.signing.outputs.mode }}
+          APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.mode != 'adhoc' && secrets.APPLE_SIGNING_IDENTITY || '' }}
         run: |
           set -euo pipefail
-          codesign --force --deep --timestamp --options runtime \
-            --sign "$APPLE_SIGNING_IDENTITY" "$APP_PATH"
+          if [ "$MODE" = adhoc ]; then
+            sign=(--sign - --timestamp=none)
+          elif [ -n "$APPLE_SIGNING_IDENTITY" ]; then
+            sign=(--sign "$APPLE_SIGNING_IDENTITY" --timestamp)
+          else
+            echo "::error::MACOS_SIGNING=${MODE} needs the APPLE_SIGNING_IDENTITY secret (docs/ci-setup.md)"
+            exit 1
+          fi
+          codesign --force --deep --options runtime "${sign[@]}" "$APP_PATH"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          codesign -dvv "$APP_PATH"
 
       - name: Prepare App Store Connect API key
+        if: steps.signing.outputs.mode == 'notarized'
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
@@ -84,6 +127,7 @@ jobs:
           echo "APPLE_API_KEY_PATH=$API_KEY_PATH" >> "$GITHUB_ENV"
 
       - name: Notarize and staple
+        if: steps.signing.outputs.mode == 'notarized'
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}

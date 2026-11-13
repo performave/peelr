@@ -36,4 +36,4 @@ xcodebuild -project Peelr.xcodeproj -scheme Peelr -configuration Debug build
 
 ## Release
 
-Tags matching `v*` run the release workflow, which builds, signs, notarizes, publishes a GitHub Release, and bumps the `peelr` cask in `Performave/homebrew-tap`.
+Tags matching `v*` run the release workflow, which builds, signs, publishes a GitHub Release, and bumps the `peelr` cask in `Performave/homebrew-tap`. The `MACOS_SIGNING` repository variable picks the signature: `adhoc` (the default, unset), `signed`, or `notarized`. There is no paid Apple Developer account right now, so releases are `adhoc`, and the cask lifts the quarantine Gatekeeper would refuse them for. See `docs/ci-setup.md`.

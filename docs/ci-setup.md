@@ -14,11 +14,30 @@ No secrets are required for tests.
 
 ## Release Workflow Requirements
 
-The [`release` workflow](../.github/workflows/release.yml) builds, signs, notarizes, publishes a GitHub Release, and updates the Homebrew cask. Sparkle update publishing also generates and uploads an appcast as a release asset. It requires an Apple Developer Program membership and repo admin access to configure secrets.
+The [`release` workflow](../.github/workflows/release.yml) builds, signs, publishes a GitHub Release, and updates the Homebrew cask. It also notarizes when the signing mode below is `notarized`. Sparkle update publishing also generates and uploads an appcast as a release asset. Configuring it needs repo admin access. Only `notarized` needs an Apple Developer Program membership.
 
-## Apple Signing Certificate
+## Signing Mode
 
-Create or download a **Developer ID Application** certificate using Xcode or Keychain Access.
+The **`MACOS_SIGNING`** repository variable picks how a release is signed. Set it under **Settings** -> **Secrets and variables** -> **Actions** -> **Variables**, not under Secrets.
+
+| `MACOS_SIGNING` | Signature | Needs | Gatekeeper |
+| --- | --- | --- | --- |
+| unset, or `adhoc` | Ad-hoc, no certificate | Nothing | Refuses the app; the cask lifts the quarantine after installing it |
+| `signed` | Your certificate, not notarized | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` | Same as `adhoc` |
+| `notarized` | Developer ID, notarized and stapled | The above with a Developer ID, plus `APPLE_API_KEY`, `APPLE_API_ISSUER`, `APPLE_API_PRIVATE_KEY` | Accepts the app |
+
+```sh
+gh variable set MACOS_SIGNING --body notarized   # or signed
+gh variable delete MACOS_SIGNING                 # back to adhoc
+```
+
+There is no paid Apple Developer account right now, so the variable is unset and releases are ad-hoc. When there is one again, add the secrets below and set the variable to `notarized`. The workflow needs no edit.
+
+Gatekeeper only checks quarantined files, and Homebrew quarantines what a cask installs. The `peelr` cask therefore removes the quarantine after installing the app, in a `postflight_steps` step. That step is harmless for a notarized release, and the cask can drop it once releases are notarized again. Someone who downloads the zip by hand in a browser gets no such help: for an ad-hoc build they have to remove the quarantine themselves (`xattr -dr com.apple.quarantine Peelr.app`).
+
+## Apple Signing Certificate (`signed`, `notarized`)
+
+For `notarized`, create or download a **Developer ID Application** certificate using Xcode or Keychain Access. For `signed`, any certificate works, including a free account's **Apple Development** certificate.
 
 Export the certificate and its private key as a `.p12`, then record the exact signing identity:
 
@@ -32,7 +51,7 @@ The identity should look like:
 Developer ID Application: Performave (TEAMID)
 ```
 
-## App Store Connect API Key
+## App Store Connect API Key (`notarized`)
 
 Use an App Store Connect API key for notarization.
 
@@ -87,18 +106,18 @@ https://github.com/Performave/Peelr/releases/latest/download/appcast.xml
 
 ## GitHub Actions Secrets
 
-Add these secrets in the Peelr repo under **Settings** -> **Secrets and variables** -> **Actions**.
+Add these secrets in the Peelr repo under **Settings** -> **Secrets and variables** -> **Actions**. A release in the default `adhoc` mode needs none of the Apple ones.
 
-| Secret | Value |
-| --- | --- |
-| `APPLE_CERTIFICATE` | Base64 of the exported `.p12`, for example `base64 -i cert.p12 \| pbcopy` |
-| `APPLE_CERTIFICATE_PASSWORD` | Password set when exporting the `.p12` |
-| `APPLE_SIGNING_IDENTITY` | Full Developer ID identity |
-| `APPLE_API_KEY` | App Store Connect Key ID |
-| `APPLE_API_ISSUER` | App Store Connect Issuer ID |
-| `APPLE_API_PRIVATE_KEY` | Raw contents of `AuthKey_XXXX.p8`, including BEGIN and END lines |
-| `SPARKLE_PRIVATE_KEY` | Exported Sparkle EdDSA private key from `generate_keys -x` |
-| `HOMEBREW_TAP_TOKEN` | Fine-grained PAT with `contents:write` on `Performave/homebrew-tap` |
+| Secret | Mode | Value |
+| --- | --- | --- |
+| `APPLE_CERTIFICATE` | `signed`, `notarized` | Base64 of the exported `.p12`, for example `base64 -i cert.p12 \| pbcopy` |
+| `APPLE_CERTIFICATE_PASSWORD` | `signed`, `notarized` | Password set when exporting the `.p12` |
+| `APPLE_SIGNING_IDENTITY` | `signed`, `notarized` | Full identity, as `security find-identity` prints it |
+| `APPLE_API_KEY` | `notarized` | App Store Connect Key ID |
+| `APPLE_API_ISSUER` | `notarized` | App Store Connect Issuer ID |
+| `APPLE_API_PRIVATE_KEY` | `notarized` | Raw contents of `AuthKey_XXXX.p8`, including BEGIN and END lines |
+| `SPARKLE_PRIVATE_KEY` | all | Exported Sparkle EdDSA private key from `generate_keys -x` |
+| `HOMEBREW_TAP_TOKEN` | all | Fine-grained PAT with `contents:write` on `Performave/homebrew-tap` |
 
 Using `gh`:
 
@@ -129,9 +148,13 @@ The workflow stores this as `HOMEBREW_TAP_TOKEN` and uses it to clone and push t
 
 | Symptom | Likely cause |
 | --- | --- |
+| "MACOS_SIGNING is '…'" | The variable holds something other than `adhoc`, `signed` or `notarized` |
+| "needs the APPLE_SIGNING_IDENTITY secret" | `signed` or `notarized` is set without the certificate secrets |
 | Certificate import fails | Bad `.p12` base64 or wrong export password |
 | `codesign` cannot find identity | `APPLE_SIGNING_IDENTITY` does not match `security find-identity` exactly |
-| Notarization auth fails | Wrong App Store Connect key, issuer, or incomplete `.p8` content |
+| `codesign --verify` reports `CSSMERR_TP_CERT_REVOKED` | The certificate was revoked, for example when a paid team lapses. `codesign` still signs with it, but macOS kills the app at launch; switch to `adhoc` or a valid certificate |
+| Notarization auth fails | Wrong App Store Connect key, issuer, incomplete `.p8` content, or no active Apple Developer Program membership |
+| "Peelr is damaged" or "Apple could not verify" on first launch | The app kept its quarantine. If you downloaded it by hand, run `xattr -dr com.apple.quarantine Peelr.app`. If you installed it with the cask, run `brew reinstall --cask peelr` and read the postflight's output |
 | Sparkle appcast generation fails | Missing or malformed `SPARKLE_PRIVATE_KEY`, wrong Sparkle tool path, or release archive not present in the appcast input directory |
 | Sparkle update verification fails in app | `SUPublicEDKey` does not match `SPARKLE_PRIVATE_KEY`, the appcast URL is wrong, or the archive was changed after appcast generation |
 | Release stops before publishing | Tag is not SemVer or `CHANGELOG.md` lacks a matching release section |
